@@ -10,30 +10,44 @@ export const useEnvironmentStore = create<EnvironmentStore>()((set, get) => ({
   isLoading: false,
   error: null,
 
-  // Load environment variables from DB
+  // Load environment variables from DB and local env
   loadEnvironmentVariables: async () => {
     try {
       set({ isLoading: true, error: null })
 
+      // First try to load from database
       const response = await fetch(API_ENDPOINTS.ENVIRONMENT)
+      let dbVariables: Record<string, EnvironmentVariable> = {}
 
-      if (!response.ok) {
-        throw new Error(`Failed to load environment variables: ${response.statusText}`)
+      if (response.ok) {
+        const { data } = await response.json()
+        if (data && typeof data === 'object') {
+          dbVariables = data
+        }
       }
 
-      const { data } = await response.json()
-
-      if (data && typeof data === 'object') {
-        set({
-          variables: data,
-          isLoading: false,
-        })
-      } else {
-        set({
-          variables: {},
-          isLoading: false,
+      // Merge with local environment variables
+      const localVariables: Record<string, EnvironmentVariable> = {}
+      if (typeof window !== 'undefined') {
+        // Access environment variables from window._env
+        const env = (window as any)._env || {}
+        Object.entries(env).forEach(([key, value]) => {
+          if (typeof value === 'string') {
+            localVariables[key] = { key, value }
+          }
         })
       }
+
+      // Merge variables, with local variables taking precedence
+      const mergedVariables = {
+        ...dbVariables,
+        ...localVariables,
+      }
+
+      set({
+        variables: mergedVariables,
+        isLoading: false,
+      })
     } catch (error) {
       logger.error('Error loading environment variables:', { error })
       set({

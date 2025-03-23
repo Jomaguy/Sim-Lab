@@ -70,6 +70,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window._env = ${JSON.stringify({
+                OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+              })}
+            `,
+          }}
+        />
       </head>
       <body suppressHydrationWarning>
         <ZoomPrevention />
