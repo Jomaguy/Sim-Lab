@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import { ChatMessage } from '@/stores/chat/types'
+import { FilePreviewList } from './file-preview'
 
 interface MessageListProps {
   messages: ChatMessage[]
@@ -27,6 +28,17 @@ export function MessageList({ messages }: MessageListProps) {
             )}
           >
             <p className="whitespace-pre-wrap">{message.content}</p>
+            
+            {/* Display attachments if present */}
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="mt-2">
+                <FilePreviewList 
+                  attachments={message.attachments} 
+                  layout="list"
+                />
+              </div>
+            )}
+            
             <span className="text-xs opacity-70 mt-1 block">
               {new Date(message.timestamp).toLocaleTimeString()}
             </span>

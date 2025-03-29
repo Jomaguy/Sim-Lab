@@ -7,6 +7,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/w/1', request.url))
   }
 
+  // DEVELOPMENT MODE - Skip authentication check
+  // Comment out or remove this if-statement in production
+  if (process.env.NODE_ENV === 'development') {
+    return NextResponse.next()
+  }
+
   const sessionCookie = getSessionCookie(request)
   if (!sessionCookie) {
     return NextResponse.redirect(new URL('/login', request.url))

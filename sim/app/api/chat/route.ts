@@ -12,12 +12,26 @@ const MessageSchema = z.object({
   content: z.string(),
 })
 
+const FileAttachmentSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  data: z.string(),
+  textContent: z.string().optional()
+})
+
+const ImageSchema = z.object({
+  data: z.string(),
+  type: z.string()
+})
+
 const RequestSchema = z.object({
   messages: z.array(MessageSchema),
   workflowState: z.object({
     blocks: z.record(z.any()),
     edges: z.array(z.any()),
   }),
+  image: ImageSchema.optional(),
+  attachments: z.array(FileAttachmentSchema).optional()
 })
 
 // Define function schemas with strict typing
@@ -150,7 +164,7 @@ export async function POST(request: Request) {
     // Parse and validate request body
     const body = await request.json()
     const validatedData = RequestSchema.parse(body)
-    const { messages, workflowState } = validatedData
+    const { messages, workflowState, image, attachments } = validatedData
 
     // Initialize OpenAI client
     const openai = new OpenAI({ apiKey })
@@ -160,6 +174,73 @@ export async function POST(request: Request) {
       { role: 'system', content: getSystemPrompt(workflowState) },
       ...messages,
     ]
+
+    // Process file attachments for the last message
+    const lastMessageIndex = messageHistory.length - 1
+    if (lastMessageIndex >= 0 && messageHistory[lastMessageIndex].role === 'user') {
+      const userMessage = messageHistory[lastMessageIndex]
+      const messageContent = userMessage.content
+      
+      // For image-only handling (backward compatibility)
+      if (image && !attachments) {
+        // Replace with a message that includes the single image
+        messageHistory[lastMessageIndex] = {
+          role: 'user',
+          content: [
+            { type: 'text', text: messageContent },
+            {
+              type: 'image_url',
+              image_url: {
+                url: image.data,
+                detail: 'auto'
+              }
+            }
+          ]
+        } as any
+      } 
+      // For multiple attachments
+      else if (attachments && attachments.length > 0) {
+        // Start with text content
+        const content: any[] = [{ type: 'text', text: messageContent }]
+        
+        // Add each image attachment
+        attachments.forEach(attachment => {
+          // Only add images directly to the message content (other files are handled via text)
+          if (attachment.type.startsWith('image/')) {
+            content.push({
+              type: 'image_url',
+              image_url: {
+                url: attachment.data,
+                detail: 'auto'
+              }
+            })
+          }
+        })
+        
+        // Add text summaries of non-image files
+        const nonImageFiles = attachments.filter(att => !att.type.startsWith('image/'))
+        if (nonImageFiles.length > 0) {
+          // Add file content text to the message if available
+          const fileTexts = nonImageFiles.map(file => {
+            if (file.textContent) {
+              return `\n\nContent from ${file.name}:\n${file.textContent}`
+            }
+            return `\n\nAttached file: ${file.name} (${file.type})`
+          })
+          
+          if (fileTexts.length > 0) {
+            // Add the text content to the first text element
+            content[0].text += fileTexts.join('')
+          }
+        }
+        
+        // Replace the message with multimodal content
+        messageHistory[lastMessageIndex] = {
+          role: 'user',
+          content
+        } as any
+      }
+    }
 
     // Make OpenAI API call with workflow context
     const completion = await openai.chat.completions.create({

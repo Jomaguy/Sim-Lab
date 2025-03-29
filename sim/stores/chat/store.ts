@@ -3,8 +3,14 @@ import { devtools } from 'zustand/middleware'
 import { createLogger } from '@/lib/logs/console-logger'
 import { useEnvironmentStore } from '../settings/environment/store'
 import { useWorkflowStore } from '../workflows/workflow/store'
-import { ChatMessage, ChatStore } from './types'
+import { ChatMessage, ChatStore, FileAttachment } from './types'
 import { calculateBlockPosition, getNextBlockNumber } from './utils'
+import { 
+  fileToBase64, 
+  extractTextContent, 
+  getFileCategory,
+  validateFiles 
+} from '@/lib/utils/file-validation'
 
 const logger = createLogger('Chat Store')
 
@@ -15,7 +21,7 @@ export const useChatStore = create<ChatStore>()(
       isProcessing: false,
       error: null,
 
-      sendMessage: async (content: string) => {
+      sendMessage: async (content: string, attachments?: File[]) => {
         try {
           set({ isProcessing: true, error: null })
 
@@ -28,20 +34,63 @@ export const useChatStore = create<ChatStore>()(
             )
           }
 
+          // Process any attachments
+          let processedAttachments: FileAttachment[] = []
+          
+          if (attachments && attachments.length > 0) {
+            // Validate files before processing
+            const validationResult = validateFiles(attachments)
+            
+            if (validationResult.invalid.length > 0) {
+              const errorMessages = validationResult.invalid
+                .map(({ file, reason }) => `${file.name}: ${reason}`)
+                .join(', ')
+              
+              throw new Error(`Invalid files: ${errorMessages}`)
+            }
+            
+            // Process valid files
+            try {
+              processedAttachments = await Promise.all(
+                validationResult.valid.map(async (file) => {
+                  const base64Data = await fileToBase64(file)
+                  const textContent = await extractTextContent(file)
+                  const category = getFileCategory(file)
+                  
+                  return {
+                    id: crypto.randomUUID(),
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    data: base64Data,
+                    textContent: textContent || undefined
+                  }
+                })
+              )
+            } catch (processingError) {
+              logger.error('Failed to process attachments:', { processingError })
+              throw new Error('Failed to process attached files')
+            }
+          }
+
           // User message
           const newMessage: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'user',
             content: content.trim(),
             timestamp: Date.now(),
+            attachments: processedAttachments.length > 0 ? processedAttachments : undefined
           }
 
           // Format messages for OpenAI API
           const formattedMessages = [
-            ...get().messages.map((msg) => ({
-              role: msg.role,
-              content: msg.content,
-            })),
+            ...get().messages.map((msg) => {
+              // Simple message format for previous messages
+              return {
+                role: msg.role,
+                content: msg.content,
+              }
+            }),
             {
               role: newMessage.role,
               content: newMessage.content,
@@ -53,19 +102,42 @@ export const useChatStore = create<ChatStore>()(
             messages: [...state.messages, newMessage],
           }))
 
+          // Prepare request body with attachments
+          const requestBody: any = {
+            messages: formattedMessages,
+            workflowState: {
+              blocks: workflowStore.blocks,
+              edges: workflowStore.edges,
+            },
+          }
+
+          // Add image and other file content for API
+          if (processedAttachments.length > 0) {
+            // Add file information
+            requestBody.attachments = processedAttachments.map(attachment => ({
+              name: attachment.name,
+              type: attachment.type,
+              data: attachment.data,
+              textContent: attachment.textContent
+            }))
+            
+            // Special case for image - for backward compatibility and GPT-4V support
+            const firstImage = processedAttachments.find(att => att.type.startsWith('image/'))
+            if (firstImage) {
+              requestBody.image = {
+                data: firstImage.data,
+                type: firstImage.type
+              }
+            }
+          }
+
           const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'X-OpenAI-Key': apiKey,
             },
-            body: JSON.stringify({
-              messages: formattedMessages,
-              workflowState: {
-                blocks: workflowStore.blocks,
-                edges: workflowStore.edges,
-              },
-            }),
+            body: JSON.stringify(requestBody),
           })
 
           if (!response.ok) {
