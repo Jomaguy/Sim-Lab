@@ -8,6 +8,7 @@ import { useChatStore } from '@/stores/chat/store'
 import { MessageList } from './message-list'
 import { FilePreviewList } from './file-preview'
 import { ALL_ACCEPTED_FILE_TYPES, validateFiles } from '@/lib/utils/file-validation'
+import { MCPTraceDisplay } from '@/components/mcp/trace-display'
 
 // Constants for image validation
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
@@ -51,70 +52,81 @@ export function ChatContainer() {
     fileInputRef.current?.click()
   }
 
-  const processFiles = (files: File[]) => {
-    if (files.length === 0) return
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
 
-    // Validate files
-    const validation = validateFiles([...selectedFiles, ...files])
+    const fileList = Array.from(files)
     
-    // Handle errors
-    if (validation.invalid.length > 0) {
-      setFileErrors(validation.invalid.map(({file, reason}) => `${file.name}: ${reason}`))
+    // Validate files
+    const { valid, invalid } = validateFiles(fileList)
+    
+    if (invalid.length > 0) {
+      setFileErrors(invalid.map(({file, reason}) => `${file.name}: ${reason}`))
     } else {
       setFileErrors([])
     }
     
-    // Add valid files to selection
-    if (validation.valid.length > 0) {
-      setSelectedFiles(prev => [...prev, ...validation.valid])
-    }
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return
-    
-    processFiles(Array.from(e.target.files))
+    setSelectedFiles([...selectedFiles, ...valid])
     
     // Reset input value to allow selecting the same file again
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
+    e.target.value = ''
   }
 
-  const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
-    
-    // Clear errors when files are removed
-    if (fileErrors.length > 0) {
-      setFileErrors([])
-    }
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(selectedFiles.filter((_, i) => i !== index))
   }
 
-  // Drag and drop handlers
-  const handleDragEnter = (e: React.DragEvent) => {
+  // Handle drag and drop
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(true)
   }
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDragging(false)
+    
+    // Check if we're leaving the main container
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX
+    const y = e.clientY
+    
+    if (
+      x < rect.left ||
+      x >= rect.right ||
+      y < rect.top ||
+      y >= rect.bottom
+    ) {
+      setIsDragging(false)
+    }
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
     
+    // Handle dropped files
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFiles(Array.from(e.dataTransfer.files))
+      const fileList = Array.from(e.dataTransfer.files)
+      
+      // Validate files
+      const { valid, invalid } = validateFiles(fileList)
+      
+      if (invalid.length > 0) {
+        setFileErrors(invalid.map(({file, reason}) => `${file.name}: ${reason}`))
+      } else {
+        setFileErrors([])
+      }
+      
+      setSelectedFiles([...selectedFiles, ...valid])
     }
   }
 
@@ -130,92 +142,110 @@ export function ChatContainer() {
 
   return (
     <div 
-      className="flex-1 flex flex-col h-full"
+      className="flex flex-col flex-1 max-h-full overflow-hidden"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4">
-        <MessageList messages={messages} />
-        <div ref={messagesEndRef} />
-      </div>
-      <form onSubmit={handleSubmit} className="p-4 border-t">
-        {/* Drag overlay */}
-        {isDragging && (
-          <div className="absolute inset-0 z-10 bg-primary/10 flex items-center justify-center">
-            <div className="bg-background p-8 rounded-lg shadow-lg text-center">
-              <Paperclip className="mx-auto h-12 w-12 text-primary/60 mb-4" />
-              <p className="text-lg font-medium">Drop files here</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Support for documents, images, and more
+        {messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="max-w-md text-center space-y-4">
+              <h2 className="text-xl font-bold">Welcome to AI Chat</h2>
+              <p className="text-muted-foreground">
+                Start a conversation with the AI assistant or try the following:
               </p>
-            </div>
-          </div>
-        )}
-        
-        {/* File preview area */}
-        {selectedFiles.length > 0 && (
-          <div className="mb-3 border rounded-lg p-3 bg-muted/20">
-            <div className="flex justify-between items-center mb-2">
-              <div className="text-sm font-medium">
-                {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected ({formatSize(totalSize)})
+              <div className="grid gap-2">
+                <Button
+                  variant="outline"
+                  className="text-sm justify-start"
+                  onClick={() => setMessage("Generate an image of a sunset over the mountains")}
+                >
+                  <ImageIcon className="mr-2 h-4 w-4" />
+                  Generate an image of a sunset over mountains
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-sm justify-start"
+                  onClick={() => setMessage("What can you help me with?")}
+                >
+                  <FileIcon className="mr-2 h-4 w-4" />
+                  What can you help me with?
+                </Button>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedFiles([])}
-                className="h-7 px-2"
-              >
-                Clear all
-              </Button>
-            </div>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {selectedFiles.map((file, index) => (
-                <div key={index} className="relative border rounded-md overflow-hidden bg-background">
-                  <div className="p-2 flex items-center gap-2">
-                    {file.type.startsWith('image/') ? (
-                      <div className="h-8 w-8 bg-muted/30 rounded-md flex items-center justify-center">
-                        <ImageIcon className="h-4 w-4" />
-                      </div>
-                    ) : (
-                      <div className="h-8 w-8 bg-muted/30 rounded-md flex items-center justify-center">
-                        <FileIcon className="h-4 w-4" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium truncate">{file.name}</div>
-                      <div className="text-xs text-muted-foreground">{formatSize(file.size)}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(index)}
-                      className="h-6 w-6 rounded-full hover:bg-muted flex items-center justify-center"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
+        ) : (
+          <MessageList messages={messages} />
         )}
-        
-        {/* Error messages */}
-        {fileErrors.length > 0 && (
-          <div className="mb-3 p-3 border border-red-200 rounded-lg bg-red-50 text-red-700">
-            <div className="font-medium mb-1">There were issues with your files:</div>
-            <ul className="text-sm list-disc list-inside">
-              {fileErrors.map((error, index) => (
-                <li key={index}>{error}</li>
-              ))}
-            </ul>
+        <div ref={messagesEndRef}></div>
+      </div>
+
+      {/* File preview area */}
+      {selectedFiles.length > 0 && (
+        <div className="border-t p-3 bg-muted/30">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium">
+              Selected files ({selectedFiles.length})
+            </span>
+            <button
+              onClick={() => setSelectedFiles([])}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear all
+            </button>
           </div>
-        )}
-        
-        {/* Message input */}
+          <FilePreviewList
+            attachments={selectedFiles.map((file, index) => ({
+              id: index.toString(),
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              data: URL.createObjectURL(file)
+            }))}
+            onRemove={(id) => handleRemoveFile(parseInt(id))}
+            showRemove={true}
+          />
+        </div>
+      )}
+      
+      {/* File error messages */}
+      {fileErrors.length > 0 && (
+        <div className="border-t p-2 bg-destructive/10 text-destructive text-sm">
+          <div className="font-medium mb-1">Unable to attach some files:</div>
+          <ul className="list-disc pl-5 text-xs space-y-1">
+            {fileErrors.map((error, i) => (
+              <li key={i}>{error}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <div className="border-t p-2 bg-destructive/10 text-destructive text-sm">
+          <div className="font-medium">Error:</div>
+          <div>{error}</div>
+        </div>
+      )}
+
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 border-2 border-dashed border-primary rounded-lg">
+          <div className="text-center">
+            <Paperclip className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium">Drop files to attach</h3>
+            <p className="text-sm text-muted-foreground mt-2">
+              Supports images, documents, and code files
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Input area */}
+      <form onSubmit={handleSubmit} className="border-t p-4">
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -253,6 +283,9 @@ export function ChatContainer() {
           </Button>
         </div>
       </form>
+      
+      {/* MCP Trace Display */}
+      <MCPTraceDisplay />
     </div>
   )
 } 

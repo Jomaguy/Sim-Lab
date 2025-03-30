@@ -6,6 +6,10 @@ export interface FileAttachment {
   data: string
   preview?: string
   textContent?: string
+  generatedImage?: {
+    prompt: string
+    seed?: number
+  }
 }
 
 export interface ChatMessage {
@@ -14,6 +18,8 @@ export interface ChatMessage {
   content: string
   timestamp: number
   attachments?: FileAttachment[]
+  isLoading?: boolean
+  imageGenerationPrompt?: string
 }
 
 export interface ChatState {
