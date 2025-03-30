@@ -5,15 +5,40 @@ import { ChatMessage } from '@/stores/chat/types'
 import { FilePreviewList } from './file-preview'
 import { GeneratedImage } from '@/components/chat/generated-image'
 import { ImageGenerationLoading } from '@/components/chat/image-generation-loading'
+import { TTSButton } from '@/components/tts/tts-button'
+import { useState, useEffect } from 'react'
+import { MessageAudio } from '@/components/tts/message-audio'
+
+// Default TTS settings
+const defaultTTSSettings = {
+  enabled: true,
+  voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel voice
+  autoplay: false,
+  volume: 0.7
+}
 
 interface MessageListProps {
   messages: ChatMessage[]
 }
 
 export function MessageList({ messages }: MessageListProps) {
+  const [ttsSettings, setTTSSettings] = useState(defaultTTSSettings)
+  
+  // Load TTS settings from localStorage if available
+  useEffect(() => {
+    try {
+      const storedSettings = localStorage.getItem('tts-settings')
+      if (storedSettings) {
+        setTTSSettings(JSON.parse(storedSettings))
+      }
+    } catch (error) {
+      console.error('Error loading TTS settings:', error)
+    }
+  }, [])
+  
   return (
-    <div className="flex flex-col gap-4">
-      {messages.map((message) => (
+    <div className="flex flex-col space-y-4 p-4">
+      {messages.map(message => (
         <div
           key={message.id}
           className={cn(
@@ -29,7 +54,18 @@ export function MessageList({ messages }: MessageListProps) {
                 : 'bg-muted text-muted-foreground'
             )}
           >
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <div className="whitespace-pre-wrap flex gap-2 items-start">
+              <p className="flex-1">{message.content}</p>
+              {message.role === 'assistant' && message.content && (
+                <TTSButton 
+                  text={message.content} 
+                  size="icon"
+                  variant="ghost"
+                  className="h-5 w-5 mt-1 shrink-0"
+                  tooltip="Listen to response"
+                />
+              )}
+            </div>
             
             {/* Display loading indicator for image generation */}
             {message.isLoading && message.imageGenerationPrompt && (
@@ -59,6 +95,18 @@ export function MessageList({ messages }: MessageListProps) {
                     layout="list"
                   />
                 )}
+              </div>
+            )}
+            
+            {/* Add MessageAudio for assistant messages */}
+            {message.role === 'assistant' && message.content && ttsSettings.enabled && (
+              <div className="mt-2">
+                <MessageAudio 
+                  text={message.content}
+                  messageId={message.id}
+                  settings={ttsSettings}
+                  className="mt-1"
+                />
               </div>
             )}
             

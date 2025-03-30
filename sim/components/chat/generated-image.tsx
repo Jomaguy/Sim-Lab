@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Download, ExpandIcon, ExternalLink, Info } from 'lucide-react'
+import { Download, ExpandIcon, ExternalLink, Info, Volume2 } from 'lucide-react'
 import { 
   Dialog, 
   DialogContent, 
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { TTSButton } from '@/components/tts/tts-button'
 
 interface GeneratedImageProps {
   imageData: string
@@ -73,8 +74,14 @@ export function GeneratedImage({ imageData, prompt, seed }: GeneratedImageProps)
                     />
                   </div>
                   <div className="text-sm space-y-2">
-                    <div>
+                    <div className="flex items-center gap-2">
                       <span className="font-medium">Prompt:</span> {prompt}
+                      <TTSButton 
+                        text={prompt} 
+                        size="icon" 
+                        variant="ghost"
+                        className="h-6 w-6"
+                      />
                     </div>
                     {seed !== undefined && (
                       <div>
@@ -115,6 +122,15 @@ export function GeneratedImage({ imageData, prompt, seed }: GeneratedImageProps)
         {seed !== undefined && (
           <span className="ml-2 font-mono">Seed: {seed}</span>
         )}
+        <div className="ml-auto">
+          <TTSButton 
+            text={`Image generated using prompt: ${prompt}`} 
+            size="icon"
+            variant="ghost"
+            className="h-5 w-5"
+            tooltip="Listen to image description"
+          />
+        </div>
       </div>
     </div>
   )

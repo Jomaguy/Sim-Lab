@@ -9,6 +9,9 @@ import { MessageList } from './message-list'
 import { FilePreviewList } from './file-preview'
 import { ALL_ACCEPTED_FILE_TYPES, validateFiles } from '@/lib/utils/file-validation'
 import { MCPTraceDisplay } from '@/components/mcp/trace-display'
+import { cn } from '@/lib/utils'
+import { Textarea } from '@/components/ui/textarea'
+import { Loader2 } from 'lucide-react'
 
 // Constants for image validation
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
@@ -73,8 +76,8 @@ export function ChatContainer() {
     e.target.value = ''
   }
 
-  const handleRemoveFile = (index: number) => {
-    setSelectedFiles(selectedFiles.filter((_, i) => i !== index))
+  const handleRemoveFile = (id: string) => {
+    setSelectedFiles(prev => prev.filter((_, index) => index.toString() !== id))
   }
 
   // Handle drag and drop
@@ -141,13 +144,7 @@ export function ChatContainer() {
   const totalSize = selectedFiles.reduce((size, file) => size + file.size, 0)
 
   return (
-    <div 
-      className="flex flex-col flex-1 max-h-full overflow-hidden"
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
+    <div className="relative flex flex-col h-full overflow-hidden bg-background">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4">
         {messages.length === 0 ? (
@@ -205,7 +202,7 @@ export function ChatContainer() {
               size: file.size,
               data: URL.createObjectURL(file)
             }))}
-            onRemove={(id) => handleRemoveFile(parseInt(id))}
+            onRemove={handleRemoveFile}
             showRemove={true}
           />
         </div>
@@ -245,27 +242,42 @@ export function ChatContainer() {
       )}
 
       {/* Input area */}
-      <form onSubmit={handleSubmit} className="border-t p-4">
-        <div className="flex items-center gap-2">
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault()
+          if (isProcessing) return
+
+          await handleSubmit(e)
+        }}
+        className="flex flex-col p-4 border-t"
+      >
+        {selectedFiles.length > 0 && (
+          <div className="mb-2">
+            <FilePreviewList
+              attachments={selectedFiles.map((file, index) => ({
+                id: index.toString(),
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                data: URL.createObjectURL(file)
+              }))}
+              onRemove={handleRemoveFile}
+              showRemove={true}
+            />
+          </div>
+        )}
+
+        <div className="relative flex items-center w-full gap-2">
           <Button
             type="button"
-            variant="ghost"
             size="icon"
+            variant="outline"
             onClick={handleFileClick}
-            disabled={isProcessing}
             className="flex-shrink-0"
-            title="Attach files"
           >
             <Paperclip className="h-5 w-5" />
           </Button>
-          <Input
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={selectedFiles.length > 0 ? "Add a message with your files..." : "Type your message..."}
-            className="flex-1"
-            disabled={isProcessing}
-          />
+
           <input
             type="file"
             accept={ALL_ACCEPTED_FILE_TYPES.join(',')}
@@ -274,17 +286,40 @@ export function ChatContainer() {
             multiple
             className="hidden"
           />
-          <Button 
-            type="submit" 
-            size="icon" 
-            disabled={isProcessing || (!message.trim() && selectedFiles.length === 0)}
+          
+          <div
+            className={cn(
+              'flex-grow relative',
+              isDragging && 'ring-2 ring-primary'
+            )}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
-            <Send className="h-4 w-4" />
-          </Button>
+            <Textarea
+              placeholder="Type a message..."
+              className="min-h-[50px] max-h-[200px] pr-14"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              disabled={isProcessing}
+            />
+
+            <Button
+              type="submit"
+              size="icon"
+              disabled={(!message && selectedFiles.length === 0) || isProcessing}
+              className="absolute right-2 bottom-2"
+            >
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </form>
-      
-      {/* MCP Trace Display */}
+
       <MCPTraceDisplay />
     </div>
   )

@@ -114,6 +114,59 @@ export const MCP_TOOLS: Record<string, MCPToolDefinition> = {
         required: false
       }
     }
+  },
+  
+  textToSpeech: {
+    name: 'textToSpeech',
+    description: 'Convert text to speech using ElevenLabs API',
+    parameters: {
+      text: {
+        type: 'string',
+        description: 'Text to convert to speech',
+        required: true
+      },
+      voiceId: {
+        type: 'string',
+        description: 'ID of the voice to use (default: Rachel)',
+        required: false
+      },
+      modelId: {
+        type: 'string',
+        description: 'ID of the model to use for generation',
+        required: false
+      },
+      stability: {
+        type: 'number',
+        description: 'Stability factor for voice generation (0-1)',
+        required: false
+      },
+      similarityBoost: {
+        type: 'number',
+        description: 'Voice clarity and similarity factor (0-1)',
+        required: false
+      },
+      style: {
+        type: 'number',
+        description: 'Speaking style value (0-1)',
+        required: false
+      },
+      speakerBoost: {
+        type: 'boolean',
+        description: 'Enhance speaker clarity and target similarity',
+        required: false
+      },
+      speechRate: {
+        type: 'number',
+        description: 'Rate of speech (0.5-2.0)',
+        required: false
+      }
+    }
+  },
+  
+  getVoices: {
+    name: 'getVoices',
+    description: 'Get available voices from ElevenLabs API',
+    parameters: {}
   }
 }
 
